@@ -128,7 +128,7 @@ export const useRoad = () => {
         },
         outbound: {
           x: [],
-          y: [28],
+          y: [29],
         },
         priority: { axis: "x", roadmap: "right-left" },
       },
@@ -142,7 +142,7 @@ export const useRoad = () => {
         priority: { axis: "x", roadmap: "left-right" },
         outbound: {
           x: [],
-          y: [-27],
+          y: [-28],
         },
       },
       moveOptions: { axis: "y", commit: "decrease" },
@@ -154,7 +154,7 @@ export const useRoad = () => {
         bandLimit: { x: [], y: [-2, -1, 0] },
         priority: { axis: "y", roadmap: "bottom-top" },
         outbound: {
-          x: [27],
+          x: [28],
           y: [],
         },
       },
@@ -167,7 +167,7 @@ export const useRoad = () => {
         bandLimit: { x: [], y: [3, 2, 1] },
         priority: { axis: "y", roadmap: "top-bottom" },
         outbound: {
-          x: [-28],
+          x: [-29],
           y: [],
         },
       },
