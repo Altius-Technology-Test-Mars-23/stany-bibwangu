@@ -353,15 +353,25 @@ function moveCar(car, { moveOptions, overtakeOptions, roadOptions }) {
       },
       { skipRoadmap: true }
     );
+
     const isThereCarWithRightPriority = findCarWithRightPriority(car, {
       moveOptions,
       overtakeOptions,
       roadOptions,
     });
 
+    const isNearOfOutgoingStopBand = nearOfOutgoingStopBand(car, {
+      axis: moveAxis,
+      commit: moveCommit,
+    });
+
+    console.log(isNearOfOutgoingStopBand, "near of outgoing", car.color);
+
     if (
       isThereCarWithRightPriority &&
-      (isDistanceUnsatisfied || !trafficAllowed) &&
+      (!isNearOfOutgoingStopBand || isDistanceUnsatisfied) &&
+      !trafficAllowed &&
+      // (isDistanceUnsatisfied || !trafficAllowed)
       carsInCrossRoad.value.length
     ) {
       console.log(
@@ -375,12 +385,17 @@ function moveCar(car, { moveOptions, overtakeOptions, roadOptions }) {
     }
   }
 
-  if (!isDistanceUnsatisfied) {
-    isDistanceUnsatisfied = distanceUnsatisfied(car, {
-      moveOptions,
-      overtakeOptions,
-    });
-  }
+  // if (!isDistanceUnsatisfied) {
+  //   isDistanceUnsatisfied = distanceUnsatisfied(car, {
+  //     moveOptions,
+  //     overtakeOptions,
+  //   });
+  // }
+
+  isDistanceUnsatisfied = distanceUnsatisfied(car, {
+    moveOptions,
+    overtakeOptions,
+  });
 
   if (isStopBandNear && !trafficAllowed) return;
 
@@ -593,6 +608,63 @@ function nearOfStopBand(car, { axis, commit }) {
   return stopBand;
 }
 
+function nearOfOutgoingStopBand(car, { axis, commit }) {
+  let stopBand;
+
+  switch (axis) {
+    case "y":
+      stopBand =
+        car.roadmap === "bottom-top"
+          ? findStopBand(car, topBottomStopBandCoordinate.value, {
+              axis,
+              commit,
+            })
+          : findStopBand(car, bottomTopStopBandCoordinate.value, {
+              axis,
+              commit,
+            });
+
+      break;
+
+    case "x":
+      stopBand =
+        car.roadmap === "left-right"
+          ? findStopBand(car, rightLeftStopBandCoordinate.value, {
+              axis,
+              commit,
+            })
+          : findStopBand(car, leftRightStopBandCoordinate.value, {
+              axis,
+              commit,
+            });
+      break;
+
+    default:
+      break;
+  }
+
+  return stopBand;
+}
+
+function findOutgoingStopBand(car, stopBandList, { axis, commit }) {
+  return stopBandList.find((stopBand) => {
+    const coord = car.coordinate[axis].map((v) =>
+      /increase/.test(commit) ? v + car.speed : v - car.speed
+    )[0];
+
+    if (car.speed === 2)
+      return /increase/.test(commit)
+        ? axis === "x"
+          ? stopBand[0] === coord || stopBand[0] === coord + 1
+          : stopBand[1] === coord || stopBand[1] === coord + 1
+        : axis === "x"
+        ? stopBand[0] === coord || stopBand[0] === coord - 1
+        : stopBand[1] === coord || stopBand[1] === coord - 1;
+
+    return axis === "x" ? stopBand[0] === coord : stopBand[1] === coord;
+  });
+}
+
 function findStopBand(car, stopBandList, { axis, commit }) {
   return stopBandList.find((stopBand) => {
     const coord = car.coordinate[axis].map((v) =>
@@ -629,15 +701,6 @@ function findCarWithRightPriority(
       const cursorCarMoveAxis = cursorCarRoadMapOptions.moveOptions.axis;
       const cursorCarMoveCommit = cursorCarRoadMapOptions.moveOptions.commit;
 
-      const isInCrossRoad = nearOfCrossRoad(
-        v,
-        {
-          axis: cursorCarMoveAxis,
-          commit: cursorCarMoveCommit,
-        },
-        { exact: true }
-      );
-
       const isCarTooNear = v.coordinate[cursorCarMoveAxis].filter((coord) =>
         /increase/.test(cursorCarMoveCommit)
           ? car.coordinate[moveOptions.axis]
@@ -670,10 +733,10 @@ function findCarWithRightPriority(
               .includes(coord)
       );
 
-      const isThereCarAheadToOvertake = findCarAheadToOverTake(car, {
-        moveOptions,
-        overtakeOptions,
-      });
+      const isThereCarAheadToOvertake = findCarAheadToOverTake(
+        v,
+        cursorCarRoadMapOptions
+      );
 
       const isDistanceUnsatisfied = distanceUnsatisfied(
         v,
@@ -682,11 +745,11 @@ function findCarWithRightPriority(
       );
 
       return (
+        isCarTooNear.length &&
         (/green|amber/.test(
           currentTrafficLightSequence.value[cursorCarMoveAxis]
         ) ||
           !isDistanceUnsatisfied) &&
-        isCarTooNear.length &&
         !isThereCarAheadToOvertake
       );
     });
