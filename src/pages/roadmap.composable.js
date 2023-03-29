@@ -1,7 +1,7 @@
 import { ref } from "vue";
 import { trafficLightSequencesList } from "./trafficLightSequences";
 
-export const useRoadCoordinate = () => {
+export const useRoad = () => {
   const crossRoadsCordinate = ref([
     [0, -0],
     [0, 1],

@@ -135,7 +135,8 @@
 import CarAndPositionComponent from "src/components/carAndPositionComponent.vue";
 import StopBandComponent from "src/components/StopBandComponent.vue";
 import { onBeforeMount, ref, computed, watch } from "vue";
-import { useRoadCoordinate } from "./roadCoordinate.composable";
+import { useRoad } from "./roadmap.composable";
+import { useCars } from "./cars.composable";
 
 const matrice = ref(
   Array(54)
@@ -174,69 +175,9 @@ const {
   trafficLightSequences,
   trafficLightsCoordinateX,
   trafficLightsCoordinateY,
-} = useRoadCoordinate();
+} = useRoad();
 
-const cars = ref([]);
-const carsSubGroup = ref([]);
-
-const carsGroupTypes = ref([
-  {
-    color: "blue",
-    roadmap: "bottom-top",
-    init: {
-      mainGroup: {
-        coordinate: { x: [2], y: [-26] },
-        gap: { axis: "y", commit: "increase" },
-      },
-      subGroup: {
-        coordinate: { x: [2], y: [-27] },
-        gap: { axis: "y", commit: "decrease" },
-      },
-    },
-  },
-  {
-    color: "red",
-    roadmap: "top-bottom",
-    init: {
-      mainGroup: {
-        coordinate: { x: [-3], y: [27] },
-        gap: { axis: "y", commit: "decrease" },
-      },
-      subGroup: {
-        coordinate: { x: [-3], y: [28] },
-        gap: { axis: "y", commit: "increase" },
-      },
-    },
-  },
-  {
-    color: "dark",
-    roadmap: "left-right",
-    init: {
-      mainGroup: {
-        coordinate: { x: [-27], y: [-2] },
-        gap: { axis: "x", commit: "increase" },
-      },
-      subGroup: {
-        coordinate: { x: [-28], y: [-2] },
-        gap: { axis: "x", commit: "decrease" },
-      },
-    },
-  },
-  {
-    color: "purple",
-    roadmap: "right-left",
-    init: {
-      mainGroup: {
-        coordinate: { x: [26], y: [3] },
-        gap: { axis: "x", commit: "decrease" },
-      },
-      subGroup: {
-        coordinate: { x: [27], y: [3] },
-        gap: { axis: "x", commit: "increase" },
-      },
-    },
-  },
-]);
+const { cars, carsSubGroup, carsGroupTypes } = useCars();
 
 const roadStripsXCoordinateIndex = ref([24, 25, 26, 27, 28, 29]);
 const roadStripsYCoordinateIndex = ref([24, 25, 26, 27, 28, 29]);
