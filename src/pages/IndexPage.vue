@@ -22,7 +22,7 @@
 
         <div class="absolute text-center" style="left: 0; z-index: 100">
           <div class="text-h1">
-            {{ globalRuntimeTime }}
+            {{ runtimeTimer }}
           </div>
 
           <div>
@@ -1024,7 +1024,7 @@ onBeforeMount(() => {
   fillMatrice();
   generateCars();
   generateSubGroupCars();
-
+  console.log(matrice.value);
   currentTrafficLightSequence.value =
     trafficLightSequences.value[currentTrafficLightSequenceIndex.value];
 });
