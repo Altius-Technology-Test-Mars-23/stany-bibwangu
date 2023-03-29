@@ -236,7 +236,7 @@ function simulatonAnimationFrame(timestamp) {
   runtimeTimer.value++;
 
   if (runtimeTimer.value - subGroupSequenceTimestampStart.value >= 30) {
-    subGroupSequenceTimestampStart.value = runtimeTimer.value;
+    subGroupSequenceTimestampStart.value = runtimeTimer.value + 30;
     cars.value.push(...carsSubGroup.value.shift());
   }
 
@@ -343,6 +343,19 @@ function moveCar(car, { moveOptions, overtakeOptions, roadOptions }) {
   );
 
   let isDistanceUnsatisfied;
+
+  if (isStopBandNear) {
+    isDistanceUnsatisfied = distanceUnsatisfied(
+      car,
+      {
+        moveOptions,
+        overtakeOptions,
+      },
+      { skipRoadmap: true }
+    );
+
+    if (isDistanceUnsatisfied) return;
+  }
 
   if (isNearOfCrossRoad) {
     isDistanceUnsatisfied = distanceUnsatisfied(
@@ -535,31 +548,63 @@ function distanceUnsatisfied(car, { moveOptions, overtakeOptions }, options) {
         cursorCarRoadMapOptions.overtakeOptions.axis;
       const cursorCarMoveCommit = cursorCarRoadMapOptions.moveOptions.commit;
 
-      return /decrease/.test(moveCommit)
-        ? (v.coordinate[moveAxis].at(-1) ===
-            car.coordinate[moveAxis][0] - 0 - v.size ||
-            v.coordinate[moveAxis].at(-1) ===
-              car.coordinate[moveAxis][0] - 2 - v.size ||
-            v.coordinate[moveAxis].at(-1) ===
-              car.coordinate[moveAxis][0] - 1 - v.size ||
-            v.coordinate[moveAxis].at(-1) === car.coordinate[moveAxis][0] ||
-            v.coordinate[cursorCarMoveAxis][0] ===
-              car.coordinate[moveAxis][0] ||
-            v.coordinate[cursorCarMoveAxis][1] ===
-              car.coordinate[moveAxis][0]) &&
+      return (
+        (/decrease/.test(moveCommit)
+          ? (v.coordinate[moveAxis].at(-1) ===
+              car.coordinate[moveAxis][0] - 0 - v.size ||
+              v.coordinate[moveAxis].at(-1) ===
+                car.coordinate[moveAxis][0] - 2 - v.size ||
+              v.coordinate[moveAxis].at(-1) ===
+                car.coordinate[moveAxis][0] - 1 - v.size ||
+              v.coordinate[moveAxis].at(-1) === car.coordinate[moveAxis][0] ||
+              v.coordinate[cursorCarMoveAxis][0] ===
+                car.coordinate[moveAxis][0] ||
+              v.coordinate[cursorCarMoveAxis][1] ===
+                car.coordinate[moveAxis][0]) &&
             v.coordinate[overtakeAxis][0] === car.coordinate[overtakeAxis][0]
-        : (v.coordinate[moveAxis].at(-1) ===
-            car.coordinate[moveAxis][0] + 0 + v.size ||
-            v.coordinate[moveAxis].at(-1) ===
-              car.coordinate[moveAxis][0] + 2 + v.size ||
-            v.coordinate[moveAxis].at(-1) ===
-              car.coordinate[moveAxis][0] + 1 + v.size ||
-            v.coordinate[moveAxis].at(-1) === car.coordinate[moveAxis][0] ||
-            v.coordinate[cursorCarMoveAxis][0] ===
-              car.coordinate[moveAxis][0] ||
-            v.coordinate[cursorCarMoveAxis][1] ===
-              car.coordinate[moveAxis][0]) &&
-            v.coordinate[overtakeAxis][0] === car.coordinate[overtakeAxis][0];
+          : (v.coordinate[moveAxis].at(-1) ===
+              car.coordinate[moveAxis][0] + 0 + v.size ||
+              v.coordinate[moveAxis].at(-1) ===
+                car.coordinate[moveAxis][0] + 2 + v.size ||
+              v.coordinate[moveAxis].at(-1) ===
+                car.coordinate[moveAxis][0] + 1 + v.size ||
+              v.coordinate[moveAxis].at(-1) === car.coordinate[moveAxis][0] ||
+              v.coordinate[cursorCarMoveAxis][0] ===
+                car.coordinate[moveAxis][0] ||
+              v.coordinate[cursorCarMoveAxis][1] ===
+                car.coordinate[moveAxis][0]) &&
+            v.coordinate[overtakeAxis][0] ===
+              car.coordinate[overtakeAxis][0]) ||
+        (/decrease/.test(moveCommit)
+          ? (v.coordinate[cursorCarMoveAxis].at(-1) ===
+              car.coordinate[cursorCarMoveAxis][0] - 0 ||
+              v.coordinate[cursorCarMoveAxis].at(-1) ===
+                car.coordinate[cursorCarMoveAxis][0] - 2 ||
+              v.coordinate[cursorCarMoveAxis].at(-1) ===
+                car.coordinate[cursorCarMoveAxis][0] - 1 ||
+              v.coordinate[cursorCarMoveAxis].at(-1) ===
+                car.coordinate[cursorCarMoveAxis][0] ||
+              v.coordinate[cursorCarMoveAxis][0] ===
+                car.coordinate[cursorCarMoveAxis][0] ||
+              v.coordinate[cursorCarMoveAxis][1] ===
+                car.coordinate[cursorCarMoveAxis][0]) &&
+            v.coordinate[overtakeAxis][0] === car.coordinate[overtakeAxis][0]
+          : (v.coordinate[cursorCarMoveAxis].at(-1) ===
+              car.coordinate[cursorCarMoveAxis][0] + 0 ||
+              v.coordinate[cursorCarMoveAxis].at(-1) ===
+                car.coordinate[cursorCarMoveAxis][0] + 2 ||
+              v.coordinate[cursorCarMoveAxis].at(-1) ===
+                car.coordinate[cursorCarMoveAxis][0] + 1 ||
+              v.coordinate[cursorCarMoveAxis].at(-1) ===
+                car.coordinate[cursorCarMoveAxis][0] ||
+              v.coordinate[cursorCarMoveAxis][0] ===
+                car.coordinate[cursorCarMoveAxis][0] ||
+              v.coordinate[cursorCarMoveAxis][1] ===
+                car.coordinate[cursorCarMoveAxis][0] ||
+              v.coordinate[cursorCarMoveAxis][1] + v.speed ===
+                car.coordinate[overtakeAxis][0]) &&
+            v.coordinate[overtakeAxis][0] === car.coordinate[overtakeAxis][0])
+      );
     });
 }
 
