@@ -236,7 +236,7 @@ function simulatonAnimationFrame(timestamp) {
   runtimeTimer.value++;
 
   if (runtimeTimer.value - subGroupSequenceTimestampStart.value >= 30) {
-    subGroupSequenceTimestampStart.value = runtimeTimer.value + 30;
+    subGroupSequenceTimestampStart.value = runtimeTimer.value;
     cars.value.push(...carsSubGroup.value.shift());
   }
 
@@ -377,8 +377,6 @@ function moveCar(car, { moveOptions, overtakeOptions, roadOptions }) {
       axis: moveAxis,
       commit: moveCommit,
     });
-
-    console.log(isNearOfOutgoingStopBand, "near of outgoing", car.color);
 
     if (
       isThereCarWithRightPriority &&
@@ -547,7 +545,7 @@ function distanceUnsatisfied(car, { moveOptions, overtakeOptions }, options) {
       const cursorCarOvertakeAxis =
         cursorCarRoadMapOptions.overtakeOptions.axis;
       const cursorCarMoveCommit = cursorCarRoadMapOptions.moveOptions.commit;
-
+      // desolé pour ce bazar, je cherchais la bonne condition, c'est ici que se trouve le hic
       return (
         (/decrease/.test(moveCommit)
           ? (v.coordinate[moveAxis].at(-1) ===

@@ -47,13 +47,13 @@ export const useRoad = () => {
   const trafficLightSequences = ref(trafficLightSequencesList);
 
   const trafficLightsCoordinateY = ref([
-    [-6, 5],
-    [5, -4],
+    [-4, 5],
+    [3, -4],
   ]);
 
   const trafficLightsCoordinateX = ref([
-    [-6, -4],
-    [5, 5],
+    [-6, -3],
+    [5, 4],
   ]);
 
   const topBottomStopBandCoordinate = ref([
