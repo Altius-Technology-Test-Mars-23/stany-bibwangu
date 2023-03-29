@@ -15,7 +15,7 @@
               {{ "outbound cars" }}
             </div>
             <div class="text-weight-medium text-h6">
-              {{ outboundList.length }}
+              {{ carOutboundList.length }}
             </div>
           </div>
         </div>
@@ -38,7 +38,7 @@
               {{ "Traffic light violation" }}
             </div>
             <div class="text-weight-medium text-h6">
-              {{ redLightViolation }}
+              {{ redLightViolationCount }}
             </div>
 
             <div class="q-mt-md text-weight-light text-body1">
@@ -46,7 +46,7 @@
             </div>
 
             <div class="text-weight-medium text-h6">
-              {{ priorityViolation }}
+              {{ priorityViolationCount }}
             </div>
           </div>
         </div>
@@ -138,31 +138,40 @@ import { onBeforeMount, ref, computed, watch } from "vue";
 import { useRoad } from "./roadmap.composable";
 import { useCars } from "./cars.composable";
 
+// init grid 2D Matrix
+
 const matrice = ref(
   Array(54)
     .fill(0)
     .map(() => Array(54).fill(0))
 );
 
-const redLightViolation = ref(0);
-const priorityViolation = ref(0);
+// init violation count variable
 
-const runtimeTimer = ref(0);
-const globalTimer = ref(0);
+const redLightViolationCount = ref(0);
+const priorityViolationCount = ref(0);
+
+const runtimeTimer = ref(0); // related to script processing, fiable
+const globalTimer = ref(0); // normal time, not fiable
 
 const trafficLightTimeStart = ref(null);
 const globalTimerTimestampStart = ref(null);
 const subGroupSequenceTimestampStart = ref(0);
 
+// init simualtion variable
+
 const similationIntervalId = ref(null);
 const simulationIntervalTimeStart = ref(null);
 const simulationStarted = ref(false);
 
+// init main traffic light variable
+
 const currentTrafficLightSequence = ref(null);
 const currentTrafficLightSequenceIndex = ref(0);
 
-const outboundList = ref([]);
+const carOutboundList = ref([]); // list of car out of screen
 
+// road setup
 const {
   rightLeftStopBandCoordinate,
   topBottomStopBandCoordinate,
@@ -182,7 +191,10 @@ const { cars, carsSubGroup, carsGroupTypes } = useCars();
 const roadStripsXCoordinateIndex = ref([24, 25, 26, 27, 28, 29]);
 const roadStripsYCoordinateIndex = ref([24, 25, 26, 27, 28, 29]);
 
+// time in minutes and seconds
 const globaltime = computed(() => getTime(globalTimer.value));
+
+// time related to script processing in minutes and seconds
 const globalRuntimeTime = computed(() => getTime(runtimeTimer.value * 1000));
 
 const carsInCrossRoad = computed(() =>
@@ -199,15 +211,134 @@ const carsInCrossRoad = computed(() =>
   })
 );
 
-function getTime(millisecond) {
-  const timeInSecond = millisecond / 1000;
-  const hours = Math.floor(timeInSecond / 3600);
-  const minutes = Math.floor(timeInSecond / 60 - hours / 60);
-  const secondes = Math.floor(timeInSecond - hours * 3600 - minutes * 60);
+onBeforeMount(() => {
+  fillMatrice();
+  generateCars();
+  generateSubGroupCars();
 
-  return `${hours > 9 ? "" : hours !== 0 ? "0" : ""}${
-    hours > 0 ? hours + ":" : ""
-  }${minutes > 9 ? "" : "0"}${minutes}:${secondes > 9 ? "" : "0"}${secondes}`;
+  currentTrafficLightSequence.value =
+    trafficLightSequences.value[currentTrafficLightSequenceIndex.value];
+});
+
+// fill matrice with x, y coordinate.
+// x: -27 to 27
+// y: 27 to -27
+
+function fillMatrice() {
+  const matriceLength = matrice.value.length;
+
+  for (let rowIndex = 0; rowIndex < matriceLength; rowIndex++) {
+    const row = matrice.value[rowIndex];
+    const yCoordinate = matriceLength / 2 - rowIndex;
+
+    const columnLength = row.length;
+
+    for (let columnIndex = 0; columnIndex < columnLength; columnIndex++) {
+      const xCoordinate = -(matriceLength / 2 - columnIndex);
+      row[columnIndex] = [xCoordinate, yCoordinate];
+    }
+  }
+}
+
+function generateCars() {
+  for (const carsGroupType of carsGroupTypes.value) {
+    const carsList = createCars(
+      5,
+      carsGroupType,
+      carsGroupType.init.mainGroup.coordinate
+    );
+
+    setCarsGap(carsList, carsGroupType.init.mainGroup.gap);
+
+    cars.value.push(...carsList);
+  }
+}
+
+function generateSubGroupCars() {
+  carsSubGroup.value = Array(9)
+    .fill(null)
+    .reduce((accumulator, curr) => {
+      const subGroup = [];
+
+      for (const carsGroupType of carsGroupTypes.value) {
+        const carsList = createCars(
+          5,
+          carsGroupType,
+          carsGroupType.init.mainGroup.coordinate
+        );
+
+        setCarsGap(carsList, carsGroupType.init.mainGroup.gap, true);
+
+        subGroup.push(...carsList);
+      }
+
+      accumulator.push(subGroup);
+
+      return accumulator;
+    }, []);
+}
+
+function createCars(numberOfCar, carsGroupType, { x, y }) {
+  return Array(numberOfCar)
+    .fill(null)
+    .map(() =>
+      createCar({
+        color: carsGroupType.color,
+        coordinate: { x, y },
+        roadmap: carsGroupType.roadmap,
+      })
+    );
+}
+
+function createCar({ color, coordinate, roadmap }) {
+  return {
+    id: crypto.randomUUID(),
+    color,
+    coordinate,
+    roadmap,
+    direction:
+      directionsList.value[
+        Math.floor(Math.random() * directionsList.value.length)
+      ],
+    ...randomSpeedAndSize(),
+  };
+}
+
+function setCarsGap(carsList, { axis, commit }, subGroup) {
+  let gap = 0;
+
+  for (const car of subGroup ? carsList : carsList.reverse()) {
+    if (/decrease/.test(commit)) {
+      car.coordinate[axis] = [car.coordinate[axis][0] - gap];
+
+      if (car.size == 2) car.coordinate[axis].push(car.coordinate[axis][0] - 1);
+
+      gap = !subGroup ? gap + car.size + 2 : gap - car.size - 2;
+
+      continue;
+    }
+
+    car.coordinate[axis] = [car.coordinate[axis][0] + gap];
+
+    if (car.size == 2) car.coordinate[axis].push(car.coordinate[axis][0] + 1);
+
+    gap = !subGroup ? gap + car.size + 2 : gap - car.size - 2;
+  }
+
+  subGroup ? carsList : carsList.reverse();
+}
+
+function startSimulation() {
+  if (simulationStarted.value) {
+    stopSimulation();
+    return;
+  }
+
+  simulationStarted.value = true;
+
+  similationIntervalId.value = window.requestAnimationFrame(
+    simulationAnimationFrame
+  );
 }
 
 function stopSimulation() {
@@ -215,7 +346,7 @@ function stopSimulation() {
   simulationStarted.value = false;
 }
 
-function simulatonAnimationFrame(timestamp) {
+function simulationAnimationFrame(timestamp) {
   if (!simulationIntervalTimeStart.value)
     simulationIntervalTimeStart.value = timestamp;
 
@@ -224,7 +355,9 @@ function simulatonAnimationFrame(timestamp) {
   if (timeElapsed < 1000) {
     trafficLightSequencesTimeout(timestamp);
     cancelAnimationFrame(similationIntervalId.value);
-    similationIntervalId.value = requestAnimationFrame(simulatonAnimationFrame);
+    similationIntervalId.value = requestAnimationFrame(
+      simulationAnimationFrame
+    );
     return;
   }
 
@@ -244,20 +377,7 @@ function simulatonAnimationFrame(timestamp) {
 
   simulationIntervalTimeStart.value = 0;
   cancelAnimationFrame(similationIntervalId.value);
-  similationIntervalId.value = requestAnimationFrame(simulatonAnimationFrame);
-}
-
-function startSimulation() {
-  if (simulationStarted.value) {
-    stopSimulation();
-    return;
-  }
-
-  simulationStarted.value = true;
-
-  similationIntervalId.value = window.requestAnimationFrame(
-    simulatonAnimationFrame
-  );
+  similationIntervalId.value = requestAnimationFrame(simulationAnimationFrame);
 }
 
 function trafficLightSequencesTimeout(timestamp) {
@@ -292,6 +412,17 @@ function trafficLightSequencesTimeout(timestamp) {
   trafficLightTimeStart.value = null;
 }
 
+function getTime(millisecond) {
+  const timeInSecond = millisecond / 1000;
+  const hours = Math.floor(timeInSecond / 3600);
+  const minutes = Math.floor(timeInSecond / 60 - hours / 60);
+  const secondes = Math.floor(timeInSecond - hours * 3600 - minutes * 60);
+
+  return `${hours > 9 ? "" : hours !== 0 ? "0" : ""}${
+    hours > 0 ? hours + ":" : ""
+  }${minutes > 9 ? "" : "0"}${minutes}:${secondes > 9 ? "" : "0"}${secondes}`;
+}
+
 function retrieveBand(car, { moveOptions, overtakeOptions, roadOptions }) {
   const { axis: moveAxis, commit: moveCommit } = moveOptions;
   const { axis: overtakeAxis, commit: overtakeCommit } = overtakeOptions;
@@ -318,21 +449,23 @@ function moveCar(car, { moveOptions, overtakeOptions, roadOptions }) {
   const { axis: moveAxis, commit: moveCommit } = moveOptions;
   const { axis: overtakeAxis, commit: overtakeCommit } = overtakeOptions;
 
-  let inBandLimit = isInBandLimit(car, {
+  let bandLimitSatisfied = isInBandLimit(car, {
     moveOptions,
     overtakeOptions,
     roadOptions,
   });
 
-  if (!inBandLimit) {
+  if (!bandLimitSatisfied) {
     retrieveBand(car, { moveOptions, overtakeOptions, roadOptions });
   }
 
+  // check if in next step, there is stop
   const isStopBandNear = nearOfStopBand(car, {
     axis: moveAxis,
     commit: moveCommit,
   });
 
+  // check if in next step, there is croassRoad
   const isNearOfCrossRoad = nearOfCrossRoad(car, {
     axis: moveAxis,
     commit: moveCommit,
@@ -345,13 +478,14 @@ function moveCar(car, { moveOptions, overtakeOptions, roadOptions }) {
   let isDistanceUnsatisfied;
 
   if (isStopBandNear) {
+    // check if in next step, it will keep recommanded distance
     isDistanceUnsatisfied = distanceUnsatisfied(
       car,
       {
         moveOptions,
         overtakeOptions,
       },
-      { skipRoadmap: true }
+      { skipRoadmap: true } // check anywhere in roadmap, even cars with another direction
     );
 
     if (isDistanceUnsatisfied) return;
@@ -364,7 +498,7 @@ function moveCar(car, { moveOptions, overtakeOptions, roadOptions }) {
         moveOptions,
         overtakeOptions,
       },
-      { skipRoadmap: true }
+      { skipRoadmap: true } // check anywhere in roadmap, even cars with another direction
     );
 
     const isThereCarWithRightPriority = findCarWithRightPriority(car, {
@@ -381,8 +515,6 @@ function moveCar(car, { moveOptions, overtakeOptions, roadOptions }) {
     if (
       isThereCarWithRightPriority &&
       (!isNearOfOutgoingStopBand || !trafficAllowed) &&
-      // !trafficAllowed &&
-      // // (isDistanceUnsatisfied || !trafficAllowed)
       carsInCrossRoad.value.length
     ) {
       console.log(
@@ -403,13 +535,7 @@ function moveCar(car, { moveOptions, overtakeOptions, roadOptions }) {
     if (isDistanceUnsatisfied) return;
   }
 
-  // if (!isDistanceUnsatisfied) {
-  //   isDistanceUnsatisfied = distanceUnsatisfied(car, {
-  //     moveOptions,
-  //     overtakeOptions,
-  //   });
-  // }
-
+  // check only cars  in the same direction
   isDistanceUnsatisfied = distanceUnsatisfied(car, {
     moveOptions,
     overtakeOptions,
@@ -435,7 +561,7 @@ function moveCar(car, { moveOptions, overtakeOptions, roadOptions }) {
     overtakeOptions,
   });
 
-  inBandLimit = isInBandLimit(
+  bandLimitSatisfied = isInBandLimit(
     car,
     {
       moveOptions,
@@ -445,19 +571,21 @@ function moveCar(car, { moveOptions, overtakeOptions, roadOptions }) {
     { overtake: true }
   );
 
+  // avoid overtake in crossroad
   if (isThereCarAheadToOvertake && isNearOfCrossRoad) return;
 
+  // allow overtake only for car with speed 2
   if (
     isThereCarAheadToOvertake &&
     !isThereCarInPassingLane &&
-    inBandLimit &&
+    bandLimitSatisfied &&
     car.speed === 2
   )
     carOvertake(car, { moveOptions, overtakeOptions });
 
   if (
     isThereCarAheadToOvertake &&
-    (isThereCarInPassingLane || !inBandLimit) &&
+    (isThereCarInPassingLane || !bandLimitSatisfied) &&
     car.speed === 2
   ) {
     return;
@@ -476,8 +604,9 @@ function moveCar(car, { moveOptions, overtakeOptions, roadOptions }) {
 
   if (!isOutbound) return;
 
-  outboundList.value.push(car);
+  carOutboundList.value.push(car);
 
+  // remove car when is out
   const index = cars.value.findIndex((v) => v.id === car.id);
   cars.value.splice(index, 1);
 }
@@ -868,60 +997,6 @@ function carOvertake(car, { moveOptions, overtakeOptions }) {
   car.coordinate[overtakeAxis] = car.coordinate[overtakeAxis].map((v) => v + 1);
 }
 
-function fillMatrice() {
-  const matriceLength = matrice.value.length;
-
-  for (let rowIndex = 0; rowIndex < matriceLength; rowIndex++) {
-    const row = matrice.value[rowIndex];
-    const yCoordinate = matriceLength / 2 - rowIndex;
-
-    const columnLength = row.length;
-
-    for (let columnIndex = 0; columnIndex < columnLength; columnIndex++) {
-      const xCoordinate = -(matriceLength / 2 - columnIndex);
-      row[columnIndex] = [xCoordinate, yCoordinate];
-    }
-  }
-}
-
-function generateCars() {
-  for (const carsGroupType of carsGroupTypes.value) {
-    const carsList = createCars(
-      5,
-      carsGroupType,
-      carsGroupType.init.mainGroup.coordinate
-    );
-
-    setCarsGap(carsList, carsGroupType.init.mainGroup.gap);
-
-    cars.value.push(...carsList);
-  }
-}
-
-function generateSubGroupCars() {
-  carsSubGroup.value = Array(9)
-    .fill(null)
-    .reduce((accumulator, curr) => {
-      const subGroup = [];
-
-      for (const carsGroupType of carsGroupTypes.value) {
-        const carsList = createCars(
-          5,
-          carsGroupType,
-          carsGroupType.init.mainGroup.coordinate
-        );
-
-        setCarsGap(carsList, carsGroupType.init.mainGroup.gap, true);
-
-        subGroup.push(...carsList);
-      }
-
-      accumulator.push(subGroup);
-
-      return accumulator;
-    }, []);
-}
-
 function changeRoadMapDirection(
   car,
   { moveOptions, overtakeOptions, roadOptions }
@@ -967,65 +1042,4 @@ function randomSpeedAndSize() {
     speed: Math.max(1, Math.floor(Math.random() * 3)),
   };
 }
-
-function isTrafficLightViolated(neared) {}
-
-function createCar({ color, coordinate, roadmap }) {
-  return {
-    id: crypto.randomUUID(),
-    color,
-    coordinate,
-    roadmap,
-    direction:
-      directionsList.value[
-        Math.floor(Math.random() * directionsList.value.length)
-      ],
-    ...randomSpeedAndSize(),
-  };
-}
-
-function createCars(numberOfCar, carsGroupType, { x, y }) {
-  return Array(numberOfCar)
-    .fill(null)
-    .map(() =>
-      createCar({
-        color: carsGroupType.color,
-        coordinate: { x, y },
-        roadmap: carsGroupType.roadmap,
-      })
-    );
-}
-
-function setCarsGap(carsList, { axis, commit }, subGroup) {
-  let gap = 0;
-
-  for (const car of subGroup ? carsList : carsList.reverse()) {
-    if (/decrease/.test(commit)) {
-      car.coordinate[axis] = [car.coordinate[axis][0] - gap];
-
-      if (car.size == 2) car.coordinate[axis].push(car.coordinate[axis][0] - 1);
-
-      gap = !subGroup ? gap + car.size + 2 : gap - car.size - 2;
-
-      continue;
-    }
-
-    car.coordinate[axis] = [car.coordinate[axis][0] + gap];
-
-    if (car.size == 2) car.coordinate[axis].push(car.coordinate[axis][0] + 1);
-
-    gap = !subGroup ? gap + car.size + 2 : gap - car.size - 2;
-  }
-
-  subGroup ? carsList : carsList.reverse();
-}
-
-onBeforeMount(() => {
-  fillMatrice();
-  generateCars();
-  generateSubGroupCars();
-  console.log(matrice.value);
-  currentTrafficLightSequence.value =
-    trafficLightSequences.value[currentTrafficLightSequenceIndex.value];
-});
 </script>
