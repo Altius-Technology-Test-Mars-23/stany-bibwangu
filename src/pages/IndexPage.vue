@@ -22,7 +22,7 @@
 
         <div class="absolute text-center" style="left: 0; z-index: 100">
           <div class="text-h1">
-            {{ runtimeTimer }}
+            {{ Math.floor(runtimeTimer) }}
           </div>
 
           <div>
@@ -68,6 +68,17 @@
             class="col-auto relative-position"
           >
             <CarAndPositionComponent
+              class="absolute"
+              style="z-index: 20"
+              v-if="
+                roadStripsXCoordinateIndex.includes(rowIndex) ||
+                roadStripsYCoordinateIndex.includes(columnIndex)
+              "
+              :coordinate="column"
+              :cars="cars"
+            />
+
+            <CarBodyPositionComponent
               class="absolute"
               style="z-index: 20"
               v-if="
@@ -132,7 +143,8 @@
 </template>
 
 <script setup>
-import CarAndPositionComponent from "src/components/carAndPositionComponent.vue";
+import CarAndPositionComponent from "src/components/CarAndPositionComponent.vue";
+import CarBodyPositionComponent from "src/components/CarBodyPositionComponent.vue";
 import StopBandComponent from "src/components/StopBandComponent.vue";
 import { onBeforeMount, ref, computed, watch } from "vue";
 import { useRoad } from "./roadmap.composable";
@@ -145,6 +157,8 @@ const matrice = ref(
     .fill(0)
     .map(() => Array(54).fill(0))
 );
+
+const carsIndex = ref(0);
 
 // init violation count variable
 
@@ -214,7 +228,9 @@ const carsInCrossRoad = computed(() =>
 onBeforeMount(() => {
   fillMatrice();
   generateCars();
-  generateSubGroupCars();
+  // generateSubGroupCars();
+
+  console.log(cars.value);
 
   currentTrafficLightSequence.value =
     trafficLightSequences.value[currentTrafficLightSequenceIndex.value];
@@ -243,12 +259,17 @@ function fillMatrice() {
 function generateCars() {
   for (const carsGroupType of carsGroupTypes.value) {
     const carsList = createCars(
-      5,
+      2,
       carsGroupType,
       carsGroupType.init.mainGroup.coordinate
     );
 
     setCarsGap(carsList, carsGroupType.init.mainGroup.gap);
+
+    for (const car of carsList) {
+      carsIndex.value++;
+      car.index = carsIndex.value;
+    }
 
     cars.value.push(...carsList);
   }
@@ -262,7 +283,7 @@ function generateSubGroupCars() {
 
       for (const carsGroupType of carsGroupTypes.value) {
         const carsList = createCars(
-          5,
+          2,
           carsGroupType,
           carsGroupType.init.mainGroup.coordinate
         );
@@ -285,16 +306,20 @@ function createCars(numberOfCar, carsGroupType, { x, y }) {
       createCar({
         color: carsGroupType.color,
         coordinate: { x, y },
+        body: {
+          coordinate: { x, y },
+        },
         roadmap: carsGroupType.roadmap,
       })
     );
 }
 
-function createCar({ color, coordinate, roadmap }) {
+function createCar({ color, coordinate, body, roadmap }) {
   return {
     id: crypto.randomUUID(),
     color,
     coordinate,
+    body,
     roadmap,
     direction:
       directionsList.value[
@@ -306,12 +331,15 @@ function createCar({ color, coordinate, roadmap }) {
 
 function setCarsGap(carsList, { axis, commit }, subGroup) {
   let gap = 0;
+  console.log(carsList);
 
   for (const car of subGroup ? carsList : carsList.reverse()) {
     if (/decrease/.test(commit)) {
       car.coordinate[axis] = [car.coordinate[axis][0] - gap];
+      car.body.coordinate[axis] = [car.body.coordinate[axis][0] - gap];
 
-      if (car.size == 2) car.coordinate[axis].push(car.coordinate[axis][0] - 1);
+      if (car.size == 2)
+        car.body.coordinate[axis] = [car.body.coordinate[axis][0] - 1];
 
       gap = !subGroup ? gap + car.size + 2 : gap - car.size - 2;
 
@@ -319,8 +347,10 @@ function setCarsGap(carsList, { axis, commit }, subGroup) {
     }
 
     car.coordinate[axis] = [car.coordinate[axis][0] + gap];
+    car.body.coordinate[axis] = [car.body.coordinate[axis][0] + gap];
 
-    if (car.size == 2) car.coordinate[axis].push(car.coordinate[axis][0] + 1);
+    if (car.size == 2)
+      car.body.coordinate[axis] = [car.body.coordinate[axis][0] + 1];
 
     gap = !subGroup ? gap + car.size + 2 : gap - car.size - 2;
   }
@@ -352,7 +382,7 @@ function simulationAnimationFrame(timestamp) {
 
   const timeElapsed = timestamp - simulationIntervalTimeStart.value;
 
-  if (timeElapsed < 1000) {
+  if (timeElapsed < 500) {
     trafficLightSequencesTimeout(timestamp);
     cancelAnimationFrame(similationIntervalId.value);
     similationIntervalId.value = requestAnimationFrame(
@@ -366,7 +396,7 @@ function simulationAnimationFrame(timestamp) {
     moveCar(car, roadMapOptions.value[car.roadmap]);
   }
 
-  runtimeTimer.value++;
+  runtimeTimer.value += 0.5;
 
   if (runtimeTimer.value - subGroupSequenceTimestampStart.value >= 30) {
     subGroupSequenceTimestampStart.value = runtimeTimer.value;
@@ -449,109 +479,10 @@ function moveCar(car, { moveOptions, overtakeOptions, roadOptions }) {
   const { axis: moveAxis, commit: moveCommit } = moveOptions;
   const { axis: overtakeAxis, commit: overtakeCommit } = overtakeOptions;
 
-  let bandLimitSatisfied = isInBandLimit(car, {
-    moveOptions,
-    overtakeOptions,
-    roadOptions,
-  });
+  if (car.speed === 1 && runtimeTimer.value.toString().split(".").length === 1)
+    return;
 
-  if (!bandLimitSatisfied) {
-    retrieveBand(car, { moveOptions, overtakeOptions, roadOptions });
-  }
-
-  // check if in next step, there is stop
-  const isStopBandNear = nearOfStopBand(car, {
-    axis: moveAxis,
-    commit: moveCommit,
-  });
-
-  // check if in next step, there is croassRoad
-  const isNearOfCrossRoad = nearOfCrossRoad(car, {
-    axis: moveAxis,
-    commit: moveCommit,
-  });
-
-  const trafficAllowed = /green|amber/.test(
-    currentTrafficLightSequence.value[moveAxis]
-  );
-
-  let isDistanceUnsatisfied;
-
-  if (isStopBandNear) {
-    // check if in next step, it will keep recommanded distance
-    isDistanceUnsatisfied = distanceUnsatisfied(
-      car,
-      {
-        moveOptions,
-        overtakeOptions,
-      },
-      { skipRoadmap: true } // check anywhere in roadmap, even cars with another direction
-    );
-
-    if (isDistanceUnsatisfied) return;
-  }
-
-  if (isNearOfCrossRoad) {
-    isDistanceUnsatisfied = distanceUnsatisfied(
-      car,
-      {
-        moveOptions,
-        overtakeOptions,
-      },
-      { skipRoadmap: true } // check anywhere in roadmap, even cars with another direction
-    );
-
-    const isThereCarWithRightPriority = findCarWithRightPriority(car, {
-      moveOptions,
-      overtakeOptions,
-      roadOptions,
-    });
-
-    const isNearOfOutgoingStopBand = nearOfOutgoingStopBand(car, {
-      axis: moveAxis,
-      commit: moveCommit,
-    });
-
-    if (
-      isThereCarWithRightPriority &&
-      (!isNearOfOutgoingStopBand || !trafficAllowed) &&
-      carsInCrossRoad.value.length
-    ) {
-      console.log(
-        car.color,
-        car.roadmap,
-        "found priority",
-        isThereCarWithRightPriority.color,
-        isThereCarWithRightPriority.roadmap
-      );
-      return;
-    }
-
-    if (car.speed === 1 && isDistanceUnsatisfied) return;
-
-    if (isDistanceUnsatisfied && isNearOfCrossRoad) return;
-
-    if (isDistanceUnsatisfied && isStopBandNear) return;
-    if (isDistanceUnsatisfied) return;
-  }
-
-  // check only cars  in the same direction
-  isDistanceUnsatisfied = distanceUnsatisfied(car, {
-    moveOptions,
-    overtakeOptions,
-  });
-
-  if (isStopBandNear && !trafficAllowed) return;
-
-  if (car.speed === 1 && isDistanceUnsatisfied) return;
-
-  if (isDistanceUnsatisfied && isNearOfCrossRoad) return;
-
-  if (isDistanceUnsatisfied && isStopBandNear) return;
-
-  if (isStopBandNear && carsInCrossRoad.value.length > 3) return;
-
-  const isThereCarAheadToOvertake = findCarAheadToOverTake(car, {
+  const isDistanceUnsatisfied = distanceUnsatisfied(car, {
     moveOptions,
     overtakeOptions,
   });
@@ -561,7 +492,7 @@ function moveCar(car, { moveOptions, overtakeOptions, roadOptions }) {
     overtakeOptions,
   });
 
-  bandLimitSatisfied = isInBandLimit(
+  const bandLimitSatisfied = isInBandLimit(
     car,
     {
       moveOptions,
@@ -571,27 +502,17 @@ function moveCar(car, { moveOptions, overtakeOptions, roadOptions }) {
     { overtake: true }
   );
 
-  // avoid overtake in crossroad
-  if (isThereCarAheadToOvertake && isNearOfCrossRoad) return;
-
-  // allow overtake only for car with speed 2
-  if (
-    isThereCarAheadToOvertake &&
-    !isThereCarInPassingLane &&
-    bandLimitSatisfied &&
-    car.speed === 2
-  )
+  if (isDistanceUnsatisfied && !isThereCarInPassingLane && bandLimitSatisfied)
     carOvertake(car, { moveOptions, overtakeOptions });
 
   if (
-    isThereCarAheadToOvertake &&
-    (isThereCarInPassingLane || !bandLimitSatisfied) &&
-    car.speed === 2
+    isDistanceUnsatisfied &&
+    (isThereCarInPassingLane || !bandLimitSatisfied)
   ) {
     return;
   }
 
-  car.coordinate[moveAxis] = updateCarCoordinate(car, {
+  updateCarCoordinate(car, {
     moveOptions,
     overtakeOptions,
   });
@@ -619,26 +540,32 @@ function updateCarCoordinate(
   const { axis: overtakeAxis, commit: overtakeCommit } = overtakeOptions;
 
   if (
-    car.size === 2 &&
-    car.coordinate[overtakeAxis].length > car.coordinate[moveAxis].length
+    car.coordinate[overtakeAxis][0] !== car.body.coordinate[overtakeAxis][0] &&
+    car.isOvertaking
   ) {
-    car.coordinate[moveAxis] = /increase/.test(moveCommit)
-      ? [
-          car.coordinate[moveAxis][0] + car.speed,
-          car.coordinate[moveAxis][0] + (car.speed + 1),
-        ]
-      : [
-          car.coordinate[moveAxis][0] - car.speed,
-          car.coordinate[moveAxis][0] - (car.speed - 1),
-        ];
+    car.body.coordinate[overtakeAxis] = [car.coordinate[overtakeAxis][0]];
 
-    car.coordinate[overtakeAxis] = [car.coordinate[overtakeAxis][0]];
-
-    return car.coordinate[moveAxis];
+    delete car.isOvertaking;
   }
 
-  return car.coordinate[moveAxis].map((v) =>
-    /increase/.test(moveCommit) ? v + car.speed : v - car.speed
+  if (
+    car.coordinate[overtakeAxis][0] !== car.body.coordinate[overtakeAxis][0] &&
+    !car.isOvertaking
+  ) {
+    car.coordinate[moveAxis] = car.coordinate[moveAxis].map((v) =>
+      /increase/.test(moveCommit) ? v + 1 : v - 1
+    );
+
+    car.isOvertaking = true;
+    return;
+  }
+
+  car.coordinate[moveAxis] = car.coordinate[moveAxis].map((v) =>
+    /increase/.test(moveCommit) ? v + 1 : v - 1
+  );
+
+  car.body.coordinate[moveAxis] = car.body.coordinate[moveAxis].map((v) =>
+    /increase/.test(moveCommit) ? v + 1 : v - 1
   );
 }
 
@@ -659,6 +586,22 @@ function isInBandLimit(
     : bandLimit[overtakeAxis].includes(car.coordinate[overtakeAxis][0]);
 }
 
+function findMidpoint(coordinateA, coordinateB) {
+  const xAverage = [...coordinateA.x, ...coordinateB.x].reduce(
+    (acc, curr) => acc + curr,
+    0
+  );
+  const yAverage = [...coordinateA.y, ...coordinateB.y].reduce(
+    (acc, curr) => acc + curr,
+    0
+  );
+
+  return {
+    x: Math.floor(xAverage / 2),
+    y: Math.floor(yAverage / 2),
+  };
+}
+
 function distanceUnsatisfied(car, { moveOptions, overtakeOptions }, options) {
   const { axis: moveAxis, commit: moveCommit } = moveOptions;
   const { axis: overtakeAxis, commit: overtakeCommit } = overtakeOptions;
@@ -674,6 +617,56 @@ function distanceUnsatisfied(car, { moveOptions, overtakeOptions }, options) {
       const cursorCarOvertakeAxis =
         cursorCarRoadMapOptions.overtakeOptions.axis;
       const cursorCarMoveCommit = cursorCarRoadMapOptions.moveOptions.commit;
+
+      const carNextPoint = {};
+
+      carNextPoint[moveAxis] = car.coordinate[moveAxis].map((coord) =>
+        /increase/.test(moveCommit) ? coord + 1 : coord - 1
+      );
+
+      carNextPoint[overtakeAxis] = car.coordinate[overtakeAxis];
+
+      const cursorCarNextPoint = {};
+
+      cursorCarNextPoint[cursorCarMoveAxis] = v.coordinate[moveAxis].map(
+        (coord) =>
+          /increase/.test(cursorCarMoveCommit) ? coord + 1 : coord - 1
+      );
+
+      cursorCarNextPoint[cursorCarOvertakeAxis] =
+        v.coordinate[cursorCarOvertakeAxis];
+
+      const midpoint = findMidpoint(cursorCarNextPoint, cursorCarNextPoint);
+
+      // if (
+      //   carNextPoint[moveAxis].includes(midpoint[moveAxis]) ||
+      //   carNextPoint[moveAxis].includes(midpoint[moveAxis] - 1) ||
+      //   carNextPoint[moveAxis].includes(midpoint[moveAxis] + 1)
+      // ) {
+      //   console.log(car.color, JSON.stringify(carNextPoint), car.index);
+
+      //   console.log(v.color, JSON.stringify(cursorCarNextPoint), v.index);
+
+      //   console.log(midpoint);
+
+      //   console.log("##############################" + "\n" + "\n");
+      // }
+
+      return (
+        (carNextPoint[moveAxis].includes(midpoint[moveAxis]) ||
+          carNextPoint[moveAxis].includes(
+            /increase/.test(moveCommit)
+              ? midpoint[moveAxis] - 1
+              : midpoint[moveAxis] + 1
+          ) ||
+          carNextPoint[moveAxis].includes(
+            /increase/.test(moveCommit)
+              ? midpoint[moveAxis] - 2
+              : midpoint[moveAxis] + 2
+          )) &&
+        carNextPoint[overtakeAxis][0] ===
+          cursorCarNextPoint[cursorCarOvertakeAxis][0]
+      );
       // desolé pour ce bazar, je cherchais la bonne condition, c'est ici que se trouve le hic
       return (
         (/decrease/.test(moveCommit)
@@ -739,10 +732,10 @@ function nearOfCrossRoad(car, { axis, commit }, options) {
   return !options?.exact
     ? crossRoadsCordinate.value.find((crossRoad) => {
         const coord = car.coordinate[axis].map((v) =>
-          /increase/.test(commit) ? v + car.speed : v - car.speed
+          /increase/.test(commit) ? v + 1 : v - 1
         )[0];
 
-        if (car.speed === 2)
+        if (1 === 2)
           return /increase/.test(commit)
             ? axis === "x"
               ? crossRoad[0] === coord || crossRoad[0] === coord + 1
@@ -838,7 +831,7 @@ function nearOfOutgoingStopBand(car, { axis, commit }) {
 function findOutgoingStopBand(car, stopBandList, { axis, commit }) {
   return stopBandList.find((stopBand) => {
     const coord = car.coordinate[axis].map((v) =>
-      /increase/.test(commit) ? v + car.speed : v - car.speed
+      /increase/.test(commit) ? v + 1 : v - 1
     )[0];
 
     return axis === "x" ? stopBand[0] === coord : stopBand[1] === coord;
@@ -848,10 +841,10 @@ function findOutgoingStopBand(car, stopBandList, { axis, commit }) {
 function findStopBand(car, stopBandList, { axis, commit }) {
   return stopBandList.find((stopBand) => {
     const coord = car.coordinate[axis].map((v) =>
-      /increase/.test(commit) ? v + car.speed : v - car.speed
+      /increase/.test(commit) ? v + 1 : v - 1
     )[0];
 
-    if (car.speed === 2)
+    if (1 === 2)
       return /increase/.test(commit)
         ? axis === "x"
           ? stopBand[0] === coord || stopBand[0] === coord + 1
@@ -885,30 +878,22 @@ function findCarWithRightPriority(
         /increase/.test(cursorCarMoveCommit)
           ? car.coordinate[moveOptions.axis]
               .map((val) =>
-                /increase/.test(moveOptions.commit)
-                  ? val + car.speed
-                  : val - car.speed
+                /increase/.test(moveOptions.commit) ? val + 1 : val - 1
               )
               .includes(coord + v.speed) ||
             car.coordinate[moveOptions.axis]
               .map((val) =>
-                /increase/.test(moveOptions.commit)
-                  ? val + car.speed
-                  : val - car.speed
+                /increase/.test(moveOptions.commit) ? val + 1 : val - 1
               )
               .includes(coord)
           : car.coordinate[moveOptions.axis]
               .map((val) =>
-                /decrease/.test(moveOptions.commit)
-                  ? val - car.speed
-                  : val + car.speed
+                /decrease/.test(moveOptions.commit) ? val - 1 : val + 1
               )
               .includes(coord - v.speed) ||
             car.coordinate[moveOptions.axis]
               .map((val) =>
-                /decrease/.test(moveOptions.commit)
-                  ? val - car.speed
-                  : val + car.speed
+                /decrease/.test(moveOptions.commit) ? val - 1 : val + 1
               )
               .includes(coord)
       );
@@ -929,10 +914,10 @@ function findCarInPassingLane(car, { moveOptions, overtakeOptions }) {
     .find((v) => {
       const isCarAhead = car.coordinate[moveAxis].filter((coord) =>
         /increase/.test(moveCommit)
-          ? v.coordinate[moveAxis].includes(coord + car.speed) ||
-            v.coordinate[moveAxis].includes(coord + car.speed + 1)
-          : v.coordinate[moveAxis].includes(coord - car.speed) ||
-            v.coordinate[moveAxis].includes(coord - car.speed - 1)
+          ? v.coordinate[moveAxis].includes(coord + 1) ||
+            v.coordinate[moveAxis].includes(coord + 1 + 1)
+          : v.coordinate[moveAxis].includes(coord - 1) ||
+            v.coordinate[moveAxis].includes(coord - 1 - 1)
       );
 
       const isCarInPassingLane = car.coordinate[overtakeAxis].filter(
@@ -964,10 +949,10 @@ function findCarAheadToOverTake(
     .find((v) => {
       const isCarAhead = car.coordinate[moveAxis].filter((coord) =>
         /increase/.test(moveCommit)
-          ? v.coordinate[moveAxis].includes(coord + car.speed) ||
-            v.coordinate[moveAxis].includes(coord + car.speed + 1)
-          : v.coordinate[moveAxis].includes(coord - car.speed) ||
-            v.coordinate[moveAxis].includes(coord - car.speed - 1)
+          ? v.coordinate[moveAxis].includes(coord + 1) ||
+            v.coordinate[moveAxis].includes(coord + 1 + 1)
+          : v.coordinate[moveAxis].includes(coord - 1) ||
+            v.coordinate[moveAxis].includes(coord - 1 - 1)
       );
 
       const isCarOnSameBand = car.coordinate[overtakeAxis].filter(
@@ -991,16 +976,30 @@ function carOvertake(car, { moveOptions, overtakeOptions }) {
     car.coordinate[overtakeAxis] = car.coordinate[overtakeAxis].map(
       (v) => v - 1
     );
+
+    if (car.size === 1) {
+      car.body.coordinate[overtakeAxis] = car.body.coordinate[overtakeAxis].map(
+        (v) => v - 1
+      );
+    }
+
     return;
   }
 
   car.coordinate[overtakeAxis] = car.coordinate[overtakeAxis].map((v) => v + 1);
+
+  if (car.size === 1) {
+    car.body.coordinate[overtakeAxis] = car.body.coordinate[overtakeAxis].map(
+      (v) => v + 1
+    );
+  }
 }
 
 function changeRoadMapDirection(
   car,
   { moveOptions, overtakeOptions, roadOptions }
 ) {
+  return;
   if (car.previousRoadmap) return;
 
   const { axis: moveAxis, commit: moveCommit } = moveOptions;
